@@ -33,3 +33,5 @@ reports/*.json
 
 # LangGraph / LangSmith local cache if any
 .langgraph/
+.langgraph_api/
+*.pkl
