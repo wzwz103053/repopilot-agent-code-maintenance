@@ -1,0 +1,18 @@
+[project]
+name = "repopilot"
+version = "0.1.0"
+description = "RepoPilot: A LangGraph-based coding agent for repository maintenance"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph",
+    "langchain",
+    "langchain-openai",
+    "python-dotenv",
+    "typing-extensions",
+    "pydantic",
+    "pytest"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["repopilot_agent*"]

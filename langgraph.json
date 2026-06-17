@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "repopilot": "./repopilot_agent/agent.py:graph"
+  },
+  "env": ".env"
+}
