@@ -1,370 +1,211 @@
 # RepoPilot
 
-RepoPilot is a LangGraph + LangChain based multi-agent software maintenance system.
+[English](README.md) | [简体中文](README_CN.md)
 
-It takes a repository issue as input, investigates the codebase, identifies the root cause, creates a minimal patch plan, proposes a unified diff, pauses for human review when required, applies the patch, runs tests, optionally enters a repair loop, and generates a pull request style summary.
+[![CI](https://github.com/wzwz103053/repopilot-agent-code-maintenance/actions/workflows/ci.yml/badge.svg)](https://github.com/wzwz103053/repopilot-agent-code-maintenance/actions/workflows/ci.yml)
 
-## Why this project exists
+## Project Overview
 
-Modern coding agents should not be simple chatbots. A useful engineering agent needs to:
+RepoPilot is a LangGraph + LangChain multi-agent code maintenance system. It takes a repository issue, scans the codebase, routes the task, investigates likely root cause, plans a minimal patch, proposes a unified diff, runs safety checks, supports human review, applies approved patches, validates with tests, enters a repair loop when validation fails, and produces a PR-style summary.
 
-* inspect repository files through tools
-* distinguish evidence from assumptions
-* plan minimal code changes
-* propose patches instead of blindly modifying files
-* support human approval before risky actions
-* run validation tests
-* use test failures as feedback
-* maintain graph state across long-running workflows
+The project is designed as a job-search portfolio project: it shows how to combine agent reasoning with deterministic engineering controls instead of letting an LLM freely edit a repository.
 
-RepoPilot demonstrates these capabilities using LangChain agents and LangGraph orchestration.
+## Core Capabilities
 
-## Core capabilities
-
-* Multi-agent repository investigation
-* Tool-calling based file reading and code search
-* Root cause analysis with evidence
-* Minimal patch planning
-* Patch Writer Agent that generates unified diff proposals
-* Patch validation before application
-* Human-in-the-loop patch review with LangGraph interrupt
-* Checkpoint-based resume using thread_id
-* Automatic patch application after approval
-* Pytest validation
-* Test failure routing into repair workflow
-* PR Summary Agent
-* Streaming execution trace for main graph and subgraphs
+- Repository scanning and code/document file summaries.
+- Deterministic issue routing for `bug_fix`, `docs_update`, `test_generation`, `refactor`, `security_review`, and `unknown`.
+- Retrieval-augmented investigation over repository code chunks.
+- Specialized LLM agents for repository navigation, planning, patch writing, repair analysis, and PR summaries.
+- Deterministic guardrails for prompt-injection-like text, secret redaction, forbidden paths, dangerous patch patterns, and patch/file scope.
+- Patch proposal as unified diff before file modification.
+- Human review with LangGraph interrupt before applying patches.
+- Pytest validation and repair-loop routing.
+- No-API unit/integration tests for deterministic logic.
+- Reproducible Benchmark framework with fixed fixture repositories and dry-run mode.
 
 ## Architecture
 
-```text
-START
-  ↓
-scan_repo
-  ↓
-investigation_subgraph
-  ├── repo_navigator_agent
-  └── planning_agent
-  ↓
-patch_subgraph
-  ├── patch_writer_agent
-  └── patch_validator
-  ↓
-human_review
-  ├── approve → apply_patch
-  └── reject  → pr_summary
-  ↓
-validation_subgraph
-  └── run_tests
-  ↓
-route_after_tests
-  ├── passed → pr_summary
-  └── failed → repair_subgraph
-                  ├── test_analyst_agent
-                  ├── repair_agent
-                  ├── apply_repair_patch
-                  └── run_tests
+```mermaid
+flowchart LR
+    Issue["Issue"] --> Scan["Scan Repository"]
+    Scan --> Investigate["Investigation Subgraph"]
+    Investigate --> Plan["Patch Planning"]
+    Plan --> Generate["Patch Generation"]
+    Generate --> Safety["Safety Validation"]
+    Safety --> Review["Human Review"]
+    Review --> Tests["Test Validation"]
+    Tests --> Repair["Repair Loop"]
+    Repair --> Plan
+    Tests --> Summary["PR Summary"]
 ```
 
-## Agents
+The actual graph also includes preflight guardrails, issue routing, retrieval, a docs-update route, patch evaluation, and deterministic blocked/unsupported-route summaries.
 
-### Repo Navigator Agent
+## Agent And Deterministic Nodes
 
-Reads repository files, searches code, collects evidence, and identifies the direct root cause of the issue.
+| Module | Type | Input | Output | Modifies Files | Safety Controls |
+|---|---|---|---|---:|---|
+| Preflight Guardrails | Deterministic Node | `repo_path`, `issue` | guardrail status/findings | No | Blocks unsafe repo paths and prompt-injection-like issue text. |
+| Scan Repo | Deterministic Node | `repo_path` | code files, file tree, repo summary | No | Skips cache/build/virtualenv directories. |
+| Issue Router | Deterministic Node | issue text, repo summary | route, confidence, candidates | No | Scores only issue text to avoid README filename bias. |
+| Retrieval Subgraph | Subgraph / Tool | code files, issue | code chunks, retrieved files, context | No | Deterministic scoring; retrieved context is treated as hints. |
+| Repo Navigator Agent | LLM Agent | issue, retrieved context, repo tools | root cause, evidence, relevant files | No | Must inspect files through tools; repo content is untrusted and redacted. |
+| Planning Agent | LLM Agent | root cause, evidence, relevant files | files to modify, plan steps, risk | No | Stabilizer prefers direct root-cause files and minimal scope. |
+| Docs Update Subgraph | Deterministic Node / Subgraph | docs issue, code files | docs target and docs plan | No | Limits docs route to README/docs-style files. |
+| Patch Writer Agent | LLM Agent | plan, allowed files, safety notes | unified diff proposal | No | Patch must target only `files_to_modify`. |
+| Patch Validator | Deterministic Node | patch proposal | diff shape and modified files | No | Rejects empty/non-unified diffs. |
+| Patch Evaluator | Deterministic Node / optional LLM Agent | patch, route, plan, root cause | accepted/rejected, score, feedback | No | Deterministic checks run first; optional LLM evaluator can be disabled. |
+| Patch Safety Guardrails | Deterministic Node | patch proposal, allowed files | safety status/findings | No | Blocks forbidden files, dangerous code, path drift, and secrets. |
+| Human Review | Deterministic Node | patch payload | approve/reject/revise decision | No | Interrupts when `auto_approve=False`; only approval reaches apply. |
+| Apply Patch | Tool / Deterministic Node | approved unified diff | patch status, modified files | Yes | Applies only validated unified diffs inside repo root. |
+| Test Validation | Tool / Deterministic Node | repo path | pytest command/status/output | No | Uses current Python executable and bounded subprocess timeout. |
+| Repair Subgraph | Subgraph / LLM Agents | failed test output, previous patch | repair patch and rerun tests | Yes, after patch apply | Repair attempts are capped. |
+| PR Summary | LLM Agent / Deterministic fallback | final state | PR title, summary, checklist | No | Does not claim tests passed unless state says they passed. |
 
-Tools:
+## Reliability And Safety
 
-* `list_repo_files`
-* `read_repo_file`
-* `search_repo_code`
+RepoPilot intentionally separates "thinking" from "acting":
 
-### Planning Agent
+- Agents propose JSON and unified diffs.
+- Deterministic nodes validate route, patch shape, patch scope, safety, review decision, and test results.
+- Repository file reads redact common secret patterns before content can reach an agent.
+- Patch application happens only after validation and review.
+- CI runs only tests that do not require API keys.
 
-Converts investigation results into a minimal safe patch plan.
+## Persistence And Human Review
 
-It separates:
-
-* `relevant_files`: files useful for understanding the issue
-* `files_to_modify`: files that actually need code changes
-
-### Patch Writer Agent
-
-Generates a unified diff patch proposal.
-
-It does not directly modify files. Patch application is handled by a separate node after validation and review.
-
-### Test Analyst Agent
-
-Analyzes failed pytest output and classifies the failure.
-
-Example failure types:
-
-* import error
-* assertion failure
-* runtime error
-* wrong fix
-* environment error
-
-### Repair Agent
-
-Uses failed test output and failure analysis to propose a repair patch.
-
-### PR Summary Agent
-
-Generates a pull request style final summary including:
-
-* title
-* issue summary
-* root cause
-* changed files
-* validation result
-* reviewer checklist
-* final report
-
-## LangGraph features used
-
-* `StateGraph`
-* shared typed state
-* nodes
-* conditional edges
-* subgraphs
-* checkpointer
-* thread_id based persistence
-* interrupt based human review
-* streaming updates
-* repair loop routing
-
-## LangChain features used
-
-* `create_agent`
-* tool calling
-* custom tools
-* OpenAI-compatible chat model integration
-* structured JSON parsing with Pydantic schemas
-* multi-agent decomposition
-
-## Project structure
-
-```text
-repopilot/
-├── repopilot_agent/
-│   ├── agent.py
-│   ├── state.py
-│   ├── config.py
-│   ├── agents/
-│   │   ├── base.py
-│   │   ├── repo_navigator_agent.py
-│   │   ├── planning_agent.py
-│   │   ├── patch_writer_agent.py
-│   │   ├── test_analyst_agent.py
-│   │   ├── repair_agent.py
-│   │   └── pr_summary_agent.py
-│   ├── schemas/
-│   │   ├── investigation.py
-│   │   ├── planning.py
-│   │   ├── patch.py
-│   │   ├── testing.py
-│   │   └── review.py
-│   ├── tools/
-│   │   ├── repo_tools.py
-│   │   ├── patch_tools.py
-│   │   ├── test_tools.py
-│   │   └── agent_tools.py
-│   ├── nodes/
-│   │   ├── scan_repo.py
-│   │   ├── human_review.py
-│   │   ├── apply_patch.py
-│   │   ├── run_tests.py
-│   │   ├── pr_summary.py
-│   │   └── route.py
-│   └── subgraphs/
-│       ├── investigation_graph.py
-│       ├── patch_graph.py
-│       ├── validation_graph.py
-│       └── repair_graph.py
-├── playground_repo/
-│   └── demo_bug_project/
-├── tests/
-├── examples/
-├── README.md
-├── pyproject.toml
-├── langgraph.json
-└── .env.example
-```
-
-## Setup
-
-Create and activate a virtual environment.
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-Install dependencies.
-
-```powershell
-pip install -e .
-pip install langchain langgraph langchain-openai python-dotenv pytest pydantic typing-extensions
-```
-
-Create `.env` from `.env.example`.
-
-```powershell
-copy .env.example .env
-```
-
-Edit `.env` and set your DashScope API key.
-
-```env
-DASHSCOPE_API_KEY=your_dashscope_api_key_here
-```
-
-## Run the auto-approve final workflow
-
-```powershell
-python tests\test_final_auto_approve.py
-```
-
-Expected result:
-
-```text
-Patch validation status: valid
-Review status: approved
-Patch status: applied
-Test status: passed
-```
-
-## Run the human-review workflow
-
-```powershell
-python tests\test_final_human_review.py
-```
-
-This run pauses at the human review step, then resumes with:
-
-```python
-Command(resume={"decision": "approve"})
-```
-
-## Run demo scripts
-
-Auto-approve demo:
-
-```powershell
-python examples\final_auto_approve_demo.py
-```
-
-Human-review demo:
-
-```powershell
-python examples\final_human_review_demo.py
-```
-
-## Demo issue
-
-RepoPilot is tested against a small demo repository.
-
-Issue:
-
-```text
-Profile page crashes when user id does not exist.
-```
-
-Root cause:
-
-```text
-get_user_profile() calls get_user(user_id), but get_user() returns None for missing users. get_user_profile() then accesses user["name"] and user["email"] on None, causing a TypeError.
-```
-
-Expected patch:
-
-```python
-if user is None:
-    return {
-        "display_name": "Unknown user",
-        "email": "",
-    }
-```
-
-## Example final output
-
-```text
-PR Title:
-Fix profile page crash for non-existent user IDs
-
-Patch status:
-applied
-
-Test status:
-passed
-
-Final summary:
-This change safely handles non-existent user IDs by returning a default profile dictionary instead of crashing. The fix is isolated to app/user_service.py, maintains backward compatibility for valid users, and passes all existing tests.
-```
-
-## Resume and checkpointing
-
-RepoPilot compiles the graph with an in-memory checkpointer.
+The graph currently compiles with LangGraph `InMemorySaver`:
 
 ```python
 checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 ```
 
-Runs must include a thread id.
+This supports process-local pause, resume, and human review when a stable `thread_id` is provided. It does not provide durable cross-restart recovery. Any README or demo language about checkpointing should be read as in-process resume support unless a durable checkpointer is added later.
 
-```python
-config = {
-    "configurable": {
-        "thread_id": "repopilot-final-demo"
-    }
-}
+## Quick Start
+
+Install the project:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
 ```
 
-This is required for interrupt-based human review because LangGraph needs to save the graph state and resume from the same thread.
+Run deterministic tests:
 
-## Resume after human review
-
-```python
-from langgraph.types import Command
-
-graph.stream(
-    Command(resume={"decision": "approve"}),
-    config=config,
-    stream_mode="updates",
-    subgraphs=True,
-)
+```powershell
+python -m pytest tests -q
 ```
 
-## Resume decision options
+Run local setup verification:
 
-```json
-{"decision": "approve", "comment": "Looks good."}
+```powershell
+python scripts/verify_local_setup.py
 ```
 
-```json
-{"decision": "reject", "comment": "Patch is unsafe."}
+Run Benchmark dry-run mode with no LLM calls:
+
+```powershell
+python benchmark/run_benchmark.py --all --dry-run
 ```
 
-```json
-{"decision": "revise", "comment": "Please change the fallback email."}
+For real Agent demos, configure provider environment variables locally or put them in a local `.env`. RepoPilot loads `.env` only when `load_config()` is called at an LLM boundary; deterministic tests, static imports, routing, and Benchmark dry-run do not require API keys. Set `PYTHON_DOTENV_DISABLED=true` to force-disable dotenv loading.
+
+## Examples
+
+Auto-approve demo:
+
+```powershell
+python examples/demos/final_auto_approve_demo.py
 ```
 
-## What this project demonstrates
+Human-review demo:
 
-This project demonstrates practical agent engineering skills:
+```powershell
+python examples/demos/final_human_review_demo.py
+```
 
-* designing multi-agent workflows
-* building tool-calling agents
-* decomposing coding tasks into specialized agents
-* using LangGraph for deterministic orchestration
-* using subgraphs for modular workflow design
-* using interrupts for human-in-the-loop review
-* using checkpointers for resumable execution
-* using tests as feedback for repair workflows
-* producing PR-style outputs for engineering workflows
+Docs-update demo:
 
-## Resume description
+```powershell
+python examples/demos/final_docs_update_demo.py
+```
 
-RepoPilot: Multi-Agent code maintenance system built with LangGraph and LangChain. Designed a stateful agent workflow for repository scanning, code investigation, patch planning, patch proposal generation, human review, patch application, pytest validation, failure repair routing, and PR summary generation. Implemented specialized agents including Repo Navigator Agent, Planning Agent, Patch Writer Agent, Test Analyst Agent, Repair Agent, and PR Summary Agent. Integrated LangGraph StateGraph, subgraphs, conditional edges, interrupt-based human approval, checkpoint persistence, and streaming traces.
+These demos may invoke configured LLM providers. Do not run them in environments where model calls, cost, or repository content exposure are not intended.
+
+## Tests
+
+Tests are organized by responsibility:
+
+- `tests/unit/`: deterministic helpers, guardrails, routing, retrieval, patch evaluation, patch/test tools, and Benchmark helpers.
+- `tests/integration/`: import and release-readiness smoke checks.
+- `tests/e2e/`: graph-level checks that avoid LLM calls unless optional dependencies are installed.
+
+Historical script-style tests were moved to `examples/legacy/`. See `docs/TEST_MIGRATION.md` for the migration map.
+
+## Benchmark
+
+The Benchmark framework lives in `benchmark/`:
+
+- `benchmark/cases.json`: fixed case metadata.
+- `benchmark/fixtures/`: lightweight fixture repositories.
+- `benchmark/run_benchmark.py`: CLI runner supporting `--case`, `--all`, and `--dry-run`.
+- `benchmark/results/`: timestamped local JSON/CSV outputs, ignored by Git except `.gitkeep`.
+
+No benchmark score is reported in this README because no real graph benchmark run has been executed and verified as part of this documentation update. See `docs/BENCHMARKING.md`.
+
+## Project Structure
+
+```text
+repopilot/
+├── repopilot_agent/
+│   ├── agent.py
+│   ├── state.py
+│   ├── agents/
+│   ├── nodes/
+│   ├── schemas/
+│   ├── subgraphs/
+│   └── tools/
+├── benchmark/
+├── docs/
+├── examples/
+├── playground_repo/
+├── scripts/
+├── tests/
+├── .github/workflows/ci.yml
+├── langgraph.json
+├── pyproject.toml
+└── README.md
+```
+
+## Design Decisions
+
+- Use LangGraph for control flow and LangChain agents only where dynamic reasoning is useful.
+- Delay LLM configuration and optional `.env` loading until an LLM boundary is reached.
+- Keep deterministic tests and Benchmark dry-run independent of API keys.
+- Keep legacy compatibility helpers documented as compatibility layers, not current core capabilities.
+
+## Known Limitations
+
+- The current Benchmark and demo repositories are intentionally small fixtures, not broad real-world repository coverage.
+- LLM outputs can be unstable across providers, model versions, prompts, and local configuration.
+- Patch proposals must pass validation, safety checks, tests, and human review before they should be trusted.
+- RepoPilot does not guarantee automatic repair for arbitrary repositories or arbitrary bugs.
+- In-memory checkpointing supports process-local resume only; durable cross-restart persistence is not implemented yet.
+
+## Roadmap
+
+- Add a durable checkpointer for cross-process recovery.
+- Expand Benchmark fixtures and add larger repository scenarios.
+- Add fake-agent e2e coverage for the successful patch path without real LLM calls.
+- Replace legacy compatibility nodes with either maintained deterministic implementations or documented removals.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Design Decisions](docs/DESIGN_DECISIONS.md)
+- [Benchmarking](docs/BENCHMARKING.md)
+- [Test Migration](docs/TEST_MIGRATION.md)
+- [Release Readiness](docs/RELEASE_READINESS.md)

@@ -1,14 +1,7 @@
-from pathlib import Path
+from __future__ import annotations
 
-from repopilot_agent.eval.cases import get_default_benchmark_cases
-from repopilot_agent.eval.runner import run_benchmark
+from benchmark.run_benchmark import main
 
 
 if __name__ == "__main__":
-    cases = get_default_benchmark_cases()
-    report_path = Path("reports/benchmark_report.md")
-
-    run_benchmark(
-        cases=cases,
-        report_path=report_path,
-    )
+    raise SystemExit(main(["--dry-run"]))

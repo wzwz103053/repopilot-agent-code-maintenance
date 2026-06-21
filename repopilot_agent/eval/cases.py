@@ -28,7 +28,7 @@ class BenchmarkCase:
 
 def get_default_benchmark_cases() -> list[BenchmarkCase]:
     repo_path = Path("playground_repo/demo_bug_project").resolve()
-    reset_script = Path("tests/reset_demo_bug_project.py").resolve()
+    reset_script = Path("examples/reset_demo_bug_project.py").resolve()
 
     return [
         BenchmarkCase(

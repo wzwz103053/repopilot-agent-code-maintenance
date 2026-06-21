@@ -1,0 +1,2 @@
+def apply_discount(price: float, rate: float) -> float:
+    return price * (1 - rate)

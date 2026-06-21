@@ -1,7 +1,17 @@
 from langgraph.types import interrupt
 
-from repopilot_agent.config import load_config
 from repopilot_agent.state import RepoPilotState
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    import os
+
+    value = os.getenv(name)
+
+    if value is None:
+        return default
+
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def human_review_node(state: RepoPilotState) -> dict:
@@ -13,8 +23,10 @@ def human_review_node(state: RepoPilotState) -> dict:
     """
     print("[graph node] human_review")
 
-    config = load_config()
-    auto_approve = state.get("auto_approve", config.default_auto_approve)
+    auto_approve = state.get(
+        "auto_approve",
+        _env_bool("REPOPILOT_AUTO_APPROVE", True),
+    )
 
     payload = {
         "action": "review_patch",

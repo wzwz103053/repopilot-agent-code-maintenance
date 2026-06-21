@@ -1,42 +1,29 @@
 import ast
 import json
-import os
 import re
 from textwrap import dedent
 
-from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 
+from repopilot_agent.config import load_config
 from repopilot_agent.schemas.investigation import InvestigationResult
 from repopilot_agent.tools.agent_tools import make_repo_tools
 
 
-load_dotenv(override=True)
-
-
 def get_llm() -> ChatOpenAI:
-    model_name = os.getenv("DASHSCOPE_MODEL", "qwen-plus")
-    api_key = os.getenv("DASHSCOPE_API_KEY")
-    base_url = os.getenv(
-        "DASHSCOPE_BASE_URL",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    )
-
-    if not api_key:
-        raise RuntimeError(
-            "DASHSCOPE_API_KEY is missing. Please set it in your .env file."
-        )
+    config = load_config()
+    model_config = config.model
 
     return ChatOpenAI(
-        model=model_name,
-        api_key=api_key,
-        base_url=base_url,
-        temperature=float(os.getenv("DASHSCOPE_TEMPERATURE", "0")),
-        max_tokens=int(os.getenv("DASHSCOPE_MAX_TOKENS", "3000")),
-        timeout=float(os.getenv("DASHSCOPE_TIMEOUT_SECONDS", "60")),
-        max_retries=int(os.getenv("DASHSCOPE_MAX_RETRIES", "2")),
+        model=model_config.model_name,
+        api_key=model_config.api_key,
+        base_url=model_config.base_url,
+        temperature=model_config.temperature,
+        max_tokens=model_config.max_tokens,
+        timeout=model_config.timeout,
+        max_retries=model_config.max_retries,
     )
 
 

@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from repopilot_agent.agents.agent_factory import create_repopilot_agent
 from repopilot_agent.schemas.patch_evaluation import PatchEvaluationResult
 from repopilot_agent.tools.patch_tools import extract_modified_files_from_diff
 
@@ -396,6 +395,8 @@ Return ONLY valid JSON.
 """.strip()
 
     try:
+        from repopilot_agent.agents.agent_factory import create_repopilot_agent
+
         agent = create_repopilot_agent(
             agent_name="patch_evaluator_agent",
             model=_get_evaluator_model(),

@@ -4,9 +4,6 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 
-load_dotenv(override=True)
-
-
 @dataclass(frozen=True)
 class ModelConfig:
     provider: str
@@ -35,6 +32,16 @@ def _get_bool_env(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _load_dotenv_if_allowed() -> None:
+    if _get_bool_env("PYTHON_DOTENV_DISABLED", False):
+        return
+
+    if not _get_bool_env("REPOPILOT_LOAD_DOTENV", True):
+        return
+
+    load_dotenv(override=False)
+
+
 def load_config() -> RepoPilotConfig:
     """
     统一读取 RepoPilot 配置。
@@ -42,6 +49,8 @@ def load_config() -> RepoPilotConfig:
     当前默认使用 DashScope / 阿里云百炼 OpenAI-compatible 接口。
     后面如果要换 DeepSeek、OpenRouter、OpenAI 官方，只需要改这里。
     """
+    _load_dotenv_if_allowed()
+
     provider = os.getenv("REPOPILOT_MODEL_PROVIDER", "dashscope")
 
     if provider == "dashscope":

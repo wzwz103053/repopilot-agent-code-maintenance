@@ -14,6 +14,8 @@ env/
 
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # IDE
 .idea/
@@ -25,13 +27,26 @@ Thumbs.db
 
 # Logs / temp
 *.log
+logs/
+runtime_logs/
 tmp/
 temp/
+*.tmp
+*.patch
+*.diff
 
 # Reports generated locally
-reports/*.json
+reports/
+benchmark/results/*
+!benchmark/results/.gitkeep
+benchmark/worktrees/
 
 # LangGraph / LangSmith local cache if any
 .langgraph/
 .langgraph_api/
 *.pkl
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/

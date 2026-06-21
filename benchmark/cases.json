@@ -1,0 +1,89 @@
+[
+  {
+    "id": "missing_user_profile",
+    "name": "Missing user profile should not crash",
+    "issue": "Profile page crashes when user id does not exist.",
+    "issue_type": "bug_fix",
+    "fixture_source": "benchmark/fixtures/missing_user_profile/source",
+    "repo_path": "benchmark/worktrees/missing_user_profile",
+    "expected_relevant_files": [
+      "app/user_service.py",
+      "app/profile.py",
+      "tests/test_profile.py"
+    ],
+    "expected_files_to_modify": [
+      "app/user_service.py"
+    ],
+    "validation_command": "python -m pytest tests",
+    "expected_outcome": "Patch app/user_service.py so missing users return a safe fallback profile and tests pass."
+  },
+  {
+    "id": "limit_default_boundary",
+    "name": "Limit default and boundary handling",
+    "issue": "top_items returns an empty list when limit is omitted; it should return all items by default and reject negative limits.",
+    "issue_type": "bug_fix",
+    "fixture_source": "benchmark/fixtures/limit_default_boundary/source",
+    "repo_path": "benchmark/worktrees/limit_default_boundary",
+    "expected_relevant_files": [
+      "app/pagination.py",
+      "tests/test_pagination.py"
+    ],
+    "expected_files_to_modify": [
+      "app/pagination.py"
+    ],
+    "validation_command": "python -m pytest tests",
+    "expected_outcome": "Patch app/pagination.py so None means all items and negative limits raise ValueError."
+  },
+  {
+    "id": "wrong_test_assertion",
+    "name": "Wrong test assertion should be corrected",
+    "issue": "The discount implementation is correct, but one pytest assertion uses the wrong expected value for a 10 percent discount.",
+    "issue_type": "bug_fix",
+    "fixture_source": "benchmark/fixtures/wrong_test_assertion/source",
+    "repo_path": "benchmark/worktrees/wrong_test_assertion",
+    "expected_relevant_files": [
+      "app/discounts.py",
+      "tests/test_discounts.py"
+    ],
+    "expected_files_to_modify": [
+      "tests/test_discounts.py"
+    ],
+    "validation_command": "python -m pytest tests",
+    "expected_outcome": "Patch tests/test_discounts.py to assert the mathematically correct discounted price."
+  },
+  {
+    "id": "readme_usage_docs",
+    "name": "README usage documentation",
+    "issue": "Update README with setup instructions and a short usage example.",
+    "issue_type": "docs_update",
+    "fixture_source": "benchmark/fixtures/readme_usage_docs/source",
+    "repo_path": "benchmark/worktrees/readme_usage_docs",
+    "expected_relevant_files": [
+      "README.md"
+    ],
+    "expected_files_to_modify": [
+      "README.md"
+    ],
+    "validation_command": "python -m pytest tests",
+    "expected_outcome": "Patch README.md only; existing smoke tests still pass."
+  },
+  {
+    "id": "multi_file_call_chain",
+    "name": "Multi-file call chain missing record",
+    "issue": "API get item display name crashes for a missing item id because the service does not handle the repository returning None.",
+    "issue_type": "bug_fix",
+    "fixture_source": "benchmark/fixtures/multi_file_call_chain/source",
+    "repo_path": "benchmark/worktrees/multi_file_call_chain",
+    "expected_relevant_files": [
+      "app/api.py",
+      "app/service.py",
+      "app/repository.py",
+      "tests/test_api.py"
+    ],
+    "expected_files_to_modify": [
+      "app/service.py"
+    ],
+    "validation_command": "python -m pytest tests",
+    "expected_outcome": "Patch app/service.py so missing repository records return Unknown item while preserving the call chain."
+  }
+]

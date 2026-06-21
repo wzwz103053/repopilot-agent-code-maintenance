@@ -1,7 +1,20 @@
+import os
+
 from typing_extensions import Literal
 
-from repopilot_agent.config import load_config
 from repopilot_agent.state import RepoPilotState
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+
+    if value is None:
+        return default
+
+    try:
+        return int(value)
+    except ValueError:
+        return default
 
 
 def route_after_preflight_guardrails(
@@ -109,13 +122,14 @@ def route_after_tests(
     failed and attempts left -> repair_subgraph
     failed and attempts exhausted -> pr_summary
     """
-    config = load_config()
-
     test_status = state.get("test_status", "unknown")
     repair_attempts = state.get("repair_attempts", 0)
     max_repair_attempts = state.get(
         "max_repair_attempts",
-        config.default_max_repair_attempts,
+        _env_int(
+            "REPOPILOT_MAX_REPAIR_ATTEMPTS",
+            _env_int("REPOPILOT_DEFAULT_MAX_REPAIR_ATTEMPTS", 2),
+        ),
     )
 
     if test_status == "passed":
