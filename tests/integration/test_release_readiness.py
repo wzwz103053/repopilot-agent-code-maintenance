@@ -15,7 +15,6 @@ def test_v18_required_project_files_exist():
         "repopilot_agent/subgraphs/retrieval_graph.py",
         "repopilot_agent/subgraphs/docs_update_graph.py",
         "repopilot_agent/subgraphs/patch_graph.py",
-        "docs/architecture.md",
         "docs/ARCHITECTURE.md",
         "docs/ARCHITECTURE_CN.md",
         "docs/BENCHMARKING.md",
@@ -61,7 +60,7 @@ def test_v18_graph_imports():
 
 
 def test_v18_documentation_mentions_key_features():
-    architecture = Path("docs/architecture.md").read_text(encoding="utf-8")
+    architecture = Path("docs/ARCHITECTURE.md").read_text(encoding="utf-8")
     workflow = Path("docs/workflow.md").read_text(encoding="utf-8")
     resume = Path("docs/resume_description.md").read_text(encoding="utf-8")
 
